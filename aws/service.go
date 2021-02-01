@@ -21,6 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/kms"
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/organizations"
+	"github.com/aws/aws-sdk-go/service/pricing"
 	"github.com/aws/aws-sdk-go/service/rds"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3control"
@@ -320,6 +321,24 @@ func OrganizationService(ctx context.Context, connectionManager *connection.Mana
 		return nil, err
 	}
 	svc := organizations.New(sess)
+	connectionManager.Cache.Set(serviceCacheKey, svc)
+
+	return svc, nil
+}
+
+// PricingService returns the service connection for AWS IAM service
+func PricingService(ctx context.Context, connectionManager *connection.Manager) (*pricing.Pricing, error) {
+	// have we already created and cached the service?
+	serviceCacheKey := "pricing"
+	if cachedData, ok := connectionManager.Cache.Get(serviceCacheKey); ok {
+		return cachedData.(*pricing.Pricing), nil
+	}
+	// so it was not in cache - create service
+	sess, err := getSession(ctx, connectionManager, GetDefaultAwsRegion())
+	if err != nil {
+		return nil, err
+	}
+	svc := pricing.New(sess)
 	connectionManager.Cache.Set(serviceCacheKey, svc)
 
 	return svc, nil
