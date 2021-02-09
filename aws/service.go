@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/autoscaling"
 	"github.com/aws/aws-sdk-go/service/cloudformation"
 	"github.com/aws/aws-sdk-go/service/cloudwatchlogs"
+	"github.com/aws/aws-sdk-go/service/costexplorer"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/ec2"
 	"github.com/aws/aws-sdk-go/service/elb"
@@ -154,6 +155,24 @@ func CloudWatchLogsService(ctx context.Context, connectionManager *connection.Ma
 		return nil, err
 	}
 	svc := cloudwatchlogs.New(sess)
+	connectionManager.Cache.Set(serviceCacheKey, svc)
+
+	return svc, nil
+}
+
+// CostExplorerService returns the service connection for AWS Cost Explorer service
+func CostExplorerService(ctx context.Context, connectionManager *connection.Manager) (*costexplorer.CostExplorer, error) {
+	// have we already created and cached the service?
+	serviceCacheKey := "ce"
+	if cachedData, ok := connectionManager.Cache.Get(serviceCacheKey); ok {
+		return cachedData.(*costexplorer.CostExplorer), nil
+	}
+	// so it was not in cache - create service
+	sess, err := getSession(ctx, connectionManager, GetDefaultAwsRegion())
+	if err != nil {
+		return nil, err
+	}
+	svc := costexplorer.New(sess)
 	connectionManager.Cache.Set(serviceCacheKey, svc)
 
 	return svc, nil
