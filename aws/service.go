@@ -22,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/aws/aws-sdk-go/service/organizations"
 	"github.com/aws/aws-sdk-go/service/rds"
+	"github.com/aws/aws-sdk-go/service/route53"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3control"
 	"github.com/aws/aws-sdk-go/service/sns"
@@ -514,4 +515,23 @@ func GetDefaultAwsRegion() string {
 		region = "us-east-1"
 	}
 	return region
+}
+
+// Route53Service returns the service connection for AWS Route53 service
+func Route53Service(ctx context.Context, connectionManager *connection.Manager) (*route53.Route53, error) {
+	// have we already created and cached the service?
+	serviceCacheKey := "route53"
+	if cachedData, ok := connectionManager.Cache.Get(serviceCacheKey); ok {
+		return cachedData.(*route53.Route53), nil
+	}
+	// so it was not in cache - create service
+	sess, err := getSession(ctx, connectionManager, GetDefaultAwsRegion())
+	if err != nil {
+		return nil, err
+	}
+	// svc := route53.New(session.New(&aws.Config{MaxRetries: aws.Int(10)}))
+	svc := route53.New(sess)
+	connectionManager.Cache.Set(serviceCacheKey, svc)
+
+	return svc, nil
 }
