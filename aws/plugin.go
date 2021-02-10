@@ -41,6 +41,7 @@ func Plugin(ctx context.Context) *plugin.Plugin {
 			"aws_cost_by_service":                    tableAwsCostByService(ctx),
 			"aws_cost_by_service_usage_type":         tableAwsCostByServiceUsageType(ctx),
 			"aws_cost_by_tag":                        tableAwsCostByTag(ctx),
+			"aws_cost_forecast":                      tableAwsCostForecast(ctx),
 			"aws_cost_usage":                         tableAwsCostAndUsage(ctx),
 			"aws_cloudwatch_log_metric_filter":       tableAwsCloudwatchLogMetricFilter(ctx),
 			"aws_dynamodb_backup":                    tableAwsDynamoDBBackup(ctx),

@@ -10,6 +10,7 @@ import (
 
 	"github.com/turbot/steampipe-plugin-sdk/grpc/proto"
 	"github.com/turbot/steampipe-plugin-sdk/plugin"
+	"github.com/turbot/steampipe-plugin-sdk/plugin/transform"
 )
 
 func tableAwsCostForecast(_ context.Context) *plugin.Table {
@@ -21,59 +22,29 @@ func tableAwsCostForecast(_ context.Context) *plugin.Table {
 			Hydrate:    listCostForecast,
 		},
 		Columns: awsColumns([]*plugin.Column{
-
-			// {
-			// 	Name:        "linked_account_id",
-			// 	Description: "",
-			// 	Type:        proto.ColumnType_STRING,
-			// 	Transform:   transform.FromField("Dimension1"),
-			// },
-
-			// Quals columns - to filter the lookups
 			{
 				Name:        "granularity",
 				Description: "",
 				Type:        proto.ColumnType_STRING,
 				Hydrate:     hydrateCostAndUsageQuals,
 			},
-
 			{
 				Name:        "period_start",
 				Description: "Start timestamp for this cost metric",
 				Type:        proto.ColumnType_TIMESTAMP,
+				Transform:   transform.FromField("TimePeriod.Start"),
 			},
 			{
 				Name:        "period_end",
 				Description: "End timestamp for this cost metric",
 				Type:        proto.ColumnType_TIMESTAMP,
+				Transform:   transform.FromField("TimePeriod.End"),
 			},
-
 			{
 				Name:        "mean_value",
 				Description: "Average forecasted value",
 				Type:        proto.ColumnType_DOUBLE,
 			},
-
-			//Standard columns for all tables
-			// {
-			// 	Name:        "tags",
-			// 	Description: resourceInterfaceDescription("tags"),
-			// 	Type:        proto.ColumnType_JSON,
-			// 	Transform:   transform.FromConstant(nil),
-			// },
-			// {
-			// 	Name:        "title",
-			// 	Description: resourceInterfaceDescription("title"),
-			// 	Type:        proto.ColumnType_STRING,
-			// 	Transform:   transform.FromField("ServiceCode"),
-			// },
-			// {
-			// 	Name:        "akas",
-			// 	Description: resourceInterfaceDescription("akas"),
-			// 	Type:        proto.ColumnType_JSON,
-			// 	Hydrate:     getAwsVpcTurbotData,
-			// 	Transform:   transform.FromValue(),
-			// },
 		},
 		),
 	}
@@ -82,8 +53,6 @@ func tableAwsCostForecast(_ context.Context) *plugin.Table {
 //// LIST FUNCTION
 
 func listCostForecast(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
-	//params := buildCostForecastInput(d.KeyColumnQuals)
-	//return streamCostAndUsage(ctx, d, params)
 
 	logger := plugin.Logger(ctx)
 	logger.Trace("listCostForecast")
@@ -94,35 +63,17 @@ func listCostForecast(ctx context.Context, d *plugin.QueryData, _ *plugin.Hydrat
 		return nil, err
 	}
 
-	params := &costexplorer.GetCostForecastInput{
-		TimePeriod: &costexplorer.DateInterval{
-			Start: aws.String(startTime),
-			End:   aws.String(endTime),
-		},
-		Granularity: aws.String(granularity),
-		Metric:      aws.String(metric),
+	params := buildCostForecastInput(d.KeyColumnQuals)
+
+	output, err := svc.GetCostForecast(params)
+	if err != nil {
+		logger.Error("listCostForecast", "err", err)
+		return nil, err
 	}
 
-	// List call
-	morePages := true
-	for morePages {
-		output, err := svc.GetCostForecast(params)
-		if err != nil {
-			logger.Error("listCostForecast", "err", err)
-			return nil, err
-		}
-
-		// stream the results...
-		for _, row := range buildMetricRows(ctx, output, d.KeyColumnQuals) {
-			d.StreamListItem(ctx, row)
-		}
-
-		// get more pages if there are any...
-		if output.NextPageToken == nil {
-			morePages = false
-			break
-		}
-		params.SetNextPageToken(*output.NextPageToken)
+	// stream the results...
+	for _, r := range output.ForecastResultsByTime {
+		d.StreamListItem(ctx, r)
 	}
 
 	return nil, nil
@@ -130,14 +81,14 @@ func listCostForecast(ctx context.Context, d *plugin.QueryData, _ *plugin.Hydrat
 
 func buildCostForecastInput(keyQuals map[string]*proto.QualValue) *costexplorer.GetCostForecastInput {
 	granularity := strings.ToUpper(keyQuals["granularity"].GetStringValue())
+
+	// TO DO - specify metric as qual?   get all cost metrics in parallel?
 	//metric := strings.ToUpper(keyQuals["metric"].GetStringValue())
 	metric := "UNBLENDED_COST"
+
 	timeFormat := "2006-01-02"
-	if granularity == "HOURLY" {
-		timeFormat = "2006-01-02T15:04:05Z"
-	}
-	endTime := time.Now().Format(timeFormat)
-	startTime := getStartDateForGranularity(granularity).Format(timeFormat)
+	startTime := time.Now().Format(timeFormat)
+	endTime := getForecastEndDateForGranularity(granularity).Format(timeFormat)
 
 	params := &costexplorer.GetCostForecastInput{
 		TimePeriod: &costexplorer.DateInterval{
@@ -151,18 +102,22 @@ func buildCostForecastInput(keyQuals map[string]*proto.QualValue) *costexplorer.
 	return params
 }
 
-
-
 func getForecastEndDateForGranularity(granularity string) time.Time {
 	switch granularity {
 	case "MONTHLY":
-		// 1 year
-		return time.Now().AddDate(-1, 0, 0)
+		return lastDayOfMonth(12) // 1 year
 	case "DAILY":
-		// 3 months
-		return time.Now().AddDate(0, 0, -13)
+		return lastDayOfMonth(3) // 3 months
 	}
-	return time.Now().AddDate(0, 0, -13)
+	return lastDayOfMonth(12) // 1 year
 }
 
+func lastDayOfMonth(numMonths int) time.Time {
+	today := time.Now()
+	goneDaysOfMonth := today.Day()
 
+	if goneDaysOfMonth == 1 {
+		return today.AddDate(0, numMonths, 0)
+	}
+	return today.AddDate(0, numMonths+1, -goneDaysOfMonth+1)
+}

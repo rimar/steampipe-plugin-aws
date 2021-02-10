@@ -38,40 +38,6 @@ func tableAwsCostByService(_ context.Context) *plugin.Table {
 					Type:        proto.ColumnType_STRING,
 					Hydrate:     hydrateCostAndUsageQuals,
 				},
-				// {
-				// 	Name:        "raw_quals",
-				// 	Description: "",
-				// 	Type:        proto.ColumnType_STRING,
-				// 	Hydrate:     hydrateKeyQuals,
-				// 	Transform:   transform.FromValue(),
-				// },
-				// {
-				// 	Name:        "raw",
-				// 	Description: "raw data",
-				// 	Type:        proto.ColumnType_JSON,
-				// 	Transform:   transform.FromValue(),
-				// },
-
-				//Standard columns for all tables
-				// {
-				// 	Name:        "tags",
-				// 	Description: resourceInterfaceDescription("tags"),
-				// 	Type:        proto.ColumnType_JSON,
-				// 	Transform:   transform.FromConstant(nil),
-				// },
-				// {
-				// 	Name:        "title",
-				// 	Description: resourceInterfaceDescription("title"),
-				// 	Type:        proto.ColumnType_STRING,
-				// 	Transform:   transform.FromField("ServiceCode"),
-				// },
-				// {
-				// 	Name:        "akas",
-				// 	Description: resourceInterfaceDescription("akas"),
-				// 	Type:        proto.ColumnType_JSON,
-				// 	Hydrate:     getAwsVpcTurbotData,
-				// 	Transform:   transform.FromValue(),
-				// },
 			}),
 		),
 	}
