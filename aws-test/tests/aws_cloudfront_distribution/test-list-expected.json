@@ -1,0 +1,22 @@
+[
+  {
+    "domain_name": "{{output.resource_aka.value}}",
+    "id": "{{output.resource_aka.value}}",
+    "is_ipv6_enabled": false
+  },
+  {
+    "domain_name": "dsnc3wnhmuh39.cloudfront.net",
+    "id": "E3PIX7TYEDZO4C",
+    "is_ipv6_enabled": false
+  },
+  {
+    "domain_name": "d2znvjafy01am9.cloudfront.net",
+    "id": "E3FW6WWZU7BYN5",
+    "is_ipv6_enabled": false
+  },
+  {
+    "domain_name": "dsnc3wnhmuh39.cloudfront.net",
+    "id": "E3PIX7TYEDZO4C",
+    "is_ipv6_enabled": false
+  }
+]

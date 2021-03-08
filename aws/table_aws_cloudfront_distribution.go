@@ -1,0 +1,188 @@
+package aws
+
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go/service/cloudfront"
+	"github.com/turbot/steampipe-plugin-sdk/grpc/proto"
+	"github.com/turbot/steampipe-plugin-sdk/plugin"
+	"github.com/turbot/steampipe-plugin-sdk/plugin/transform"
+)
+
+func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
+	return &plugin.Table{
+		Name:        "aws_cloudfront_distribution",
+		Description: "AWS Cloudfront Distribution",
+		Get: &plugin.GetConfig{
+			KeyColumns:        plugin.SingleColumn("id"),
+			ShouldIgnoreError: isNotFoundError([]string{"ValidationException"}),
+			Hydrate:           getCloudfrontDistribution,
+		},
+		List: &plugin.ListConfig{
+			Hydrate: listAwsCloudfrontDistribution,
+		},
+		GetMatrixItem: BuildRegionList,
+		Columns: awsRegionalColumns([]*plugin.Column{
+			{
+				Name:        "id",
+				Description: "The identifier for the Distribution.",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "enabled",
+				Description: "Whether the Distribution is enabled to accept user requests for content.",
+				Type:        proto.ColumnType_BOOL,
+			},
+			{
+				Name:        "status",
+				Description: "The current status of the Distribution. When the status is Deployed, the distribution's information is propagated to all CloudFront edge locations.",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "last_modified_time",
+				Description: "The date and time the Distribution was last modified.",
+				Type:        proto.ColumnType_TIMESTAMP,
+			},
+			{
+				Name:        "domain_name",
+				Description: "The domain name that corresponds to the Distribution, for example, d111111abcdef8.cloudfront.net.",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "comment",
+				Description: "The comment originally specified when this Distribution was created.",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "http_version",
+				Description: "Specify the maximum HTTP version that you want viewers to use to communicate with CloudFront. The default value for new web Distributions is http2. Viewers that don't support HTTP/2 will automatically use an earlier version.",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "is_ipv6_enabled",
+				Description: "Whether CloudFront responds to IPv6 DNS requests with an IPv6 address for your Distribution.",
+				Type:        proto.ColumnType_BOOL,
+				Transform:   transform.FromField("IsIPV6Enabled"),
+			},
+			{
+				Name:        "price_class",
+				Description: "A complex type that contains information about price class for this streaming Distribution.",
+				Type:        proto.ColumnType_STRING,
+			},
+			{
+				Name:        "web_acl_id",
+				Description: "The Web ACL Id (if any) associated with the distribution..",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("WebACLId"),
+			},
+			{
+				Name:        "aliases_quantity",
+				Description: "The number of CNAME aliases, if any, that you want to associate with this Distribution.",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("Aliases.Quantity"),
+			},
+			{
+				Name:        "aliases_items",
+				Description: "A complex type that contains the CNAME aliases, if any, that you want to associate with this distribution.",
+				Type:        proto.ColumnType_JSON,
+				Transform:   transform.FromField("Aliases.Items"),
+			},
+			{
+				Name:        "cache_behaviors_quantity",
+				Description: "The number of cache behaviors for this Distribution.",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("CacheBehaviors.Quantity"),
+			},
+			{
+				Name:        "cache_behaviors_items",
+				Description: "Optional: A complex type that contains cache behaviors for this Distribution. If Quantity is 0, you can omit Items. ",
+				Type:        proto.ColumnType_JSON,
+				Transform:   transform.FromField("CacheBehaviors.Items"),
+			},
+			{
+				Name:        "origins_quantity",
+				Description: "The number of origins for this distribution.",
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("Origins.Quantity"),
+			},
+			{
+				Name:        "origins_items",
+				Description: "A list of origins. ",
+				Type:        proto.ColumnType_JSON,
+				Transform:   transform.FromField("Origins.Items"),
+			},
+			{
+				Name:        "akas",
+				Description: resourceInterfaceDescription("akas"),
+				Type:        proto.ColumnType_JSON,
+				Transform:   transform.FromField("ARN").Transform(arnToAkas),
+			},
+		}),
+	}
+}
+
+//// LIST FUNCTION
+
+func listAwsCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
+	// TODO put me in helper function
+	var region string
+	matrixRegion := plugin.GetMatrixItem(ctx)[matrixKeyRegion]
+	if matrixRegion != nil {
+		region = matrixRegion.(string)
+	}
+	plugin.Logger(ctx).Trace("listAwsCloudfrontDistribution", "AWS_REGION", region)
+
+	// Create session
+	svc, err := CloudFrontService(ctx, d, region)
+	if err != nil {
+		return nil, err
+	}
+
+	// List call
+	err = svc.ListDistributionsPages(
+		&cloudfront.ListDistributionsInput{},
+		func(page *cloudfront.ListDistributionsOutput, isLast bool) bool {
+			for _, parameter := range page.DistributionList.Items {
+				d.StreamListItem(ctx, parameter)
+
+			}
+			return !isLast
+		},
+	)
+
+	return nil, err
+}
+
+func getCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	logger := plugin.Logger(ctx)
+	logger.Trace("getCloudfrontDistribution")
+	region := plugin.GetMatrixItem(ctx)[matrixKeyRegion].(string)
+
+	// Create Session
+	svc, err := CloudFrontService(ctx, d, region)
+	if err != nil {
+		return nil, err
+	}
+
+	var cloudfrontID string
+	if h.Item != nil {
+		i := h.Item.(*cloudfront.DistributionList)
+		cloudfrontID = *i.Items[0].Id
+	} else {
+		cloudfrontID = d.KeyColumnQuals["id"].GetStringValue()
+	}
+
+	params := &cloudfront.GetDistributionInput{
+		Id: &cloudfrontID,
+	}
+
+	op, err := svc.GetDistribution(params)
+	if err != nil {
+		logger.Debug("getCloudfrontDistribution", "ERROR", err)
+		return nil, err
+	}
+
+
+
+	return op, nil
+}
