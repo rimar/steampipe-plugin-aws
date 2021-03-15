@@ -234,7 +234,7 @@ func getCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, h *plug
 
 	var cloudfrontID string
 	if h.Item != nil {
-		cloudfrontID = *cloudfrontDistributionValue(h.Item, "id")
+		cloudfrontID = *cloudfrontDistributionID(h.Item)
 	} else {
 		cloudfrontID = d.KeyColumnQuals["id"].GetStringValue()
 	}
@@ -260,7 +260,7 @@ func getCloudfrontDistributionTags(ctx context.Context, d *plugin.QueryData, h *
 		return nil, err
 	}
 
-	cloudfrontArn := cloudfrontDistributionValue(h.Item, "arn")
+	cloudfrontArn := cloudfrontDistributionArn(h.Item)
 
 	// Build the params
 	params := &cloudfront.ListTagsForResourceInput{
@@ -296,22 +296,23 @@ func cloudfrontDistributionTagListToTurbotTags(ctx context.Context, d *transform
 	return turbotTagsMap, nil
 }
 
-func cloudfrontDistributionValue(item interface{}, value string) *string {
+func cloudfrontDistributionID(item interface{}) *string {
 	switch item.(type) {
 	case *cloudfront.GetDistributionOutput:
-		if value == "id" {
-			val := item.(*cloudfront.GetDistributionOutput).Distribution
-			return val.Id
-		}
-		//arn := *item.(*cloudfront.GetDistributionOutput)
-		//return *item.(*cloudfront.GetDistributionOutput).Distribution.ARN
-		val := item.(*cloudfront.GetDistributionOutput).Distribution
-			return val.Id
+		return item.(*cloudfront.GetDistributionOutput).Distribution.Id
 
 	case *cloudfront.DistributionSummary:
-		if value == "id" {
-			return item.(*cloudfront.DistributionSummary).Id
-		}
+		return item.(*cloudfront.DistributionSummary).Id
+	}
+	return nil
+}
+
+func cloudfrontDistributionArn(item interface{}) *string {
+	switch item.(type) {
+	case *cloudfront.GetDistributionOutput:
+		return item.(*cloudfront.GetDistributionOutput).Distribution.ARN
+
+	case *cloudfront.DistributionSummary:
 		return item.(*cloudfront.DistributionSummary).ARN
 	}
 	return nil
