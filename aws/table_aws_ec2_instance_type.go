@@ -216,6 +216,10 @@ func listAwsInstanceTypesOfferings(ctx context.Context, d *plugin.QueryData, h *
 				Name:   aws.String("location"),
 				Values: []*string{aws.String(region)},
 			},
+			{
+				Name: aws.String("instance-type"),
+				Values: []*string{aws.String("c5*")},
+			},
 		},
 	}
 

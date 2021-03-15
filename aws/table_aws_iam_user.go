@@ -3,6 +3,8 @@ package aws
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io/ioutil"
 	"net/url"
 	"strings"
 	"sync"
@@ -152,15 +154,25 @@ func tableAwsIamUser(_ context.Context) *plugin.Table {
 
 //// LIST FUNCTION
 
-func listIamUsers(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
+func listIamUsers(ctx context.Context, d *plugin.QueryData, hd *plugin.HydrateData) (interface{}, error) {
+
+	writeFile("/tmp/list.txt", fmt.Sprintf("xxxx listIamUsers Context=%v, QueryData=%v, HydrateData=%v\n", ctx, d, hd))
+
 	// Create Session
 	svc, err := IAMService(ctx, d)
 	if err != nil {
 		return nil, err
 	}
 
+	listUsersInput := &iam.ListUsersInput{}
+	//quals := d.QueryContext.Quals
+	//for k,v := range quals {
+	//	if k == "name" {
+	//
+	//	}
+	//}
 	err = svc.ListUsersPages(
-		&iam.ListUsersInput{},
+		listUsersInput,
 		func(page *iam.ListUsersOutput, lastPage bool) bool {
 			for _, user := range page.Users {
 				d.StreamListItem(ctx, user)
@@ -174,7 +186,8 @@ func listIamUsers(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateDat
 
 //// HYDRATE FUNCTIONS
 
-func getIamUser(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
+func getIamUser(ctx context.Context, d *plugin.QueryData, hd *plugin.HydrateData) (interface{}, error) {
+	writeFile("/tmp/get.txt", fmt.Sprintf("xxxx getIamUser Context=%v, QueryData=%v, HydrateData=%v\n", ctx, d, hd))
 	plugin.Logger(ctx).Trace("getIamUser")
 
 	arn := d.KeyColumnQuals["arn"].GetStringValue()
@@ -245,6 +258,14 @@ func getAwsIamUserData(ctx context.Context, d *plugin.QueryData, h *plugin.Hydra
 		"PermissionsBoundaryArn":  PermissionsBoundaryArn,
 		"PermissionsBoundaryType": PermissionsBoundaryType,
 	}, nil
+}
+
+func writeFile(f string, str string)  {
+	// open output file
+	err := ioutil.WriteFile(f, []byte(str), 0644)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func getAwsIamUserAttachedPolicies(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {

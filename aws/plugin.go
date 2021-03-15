@@ -8,7 +8,6 @@ package aws
 
 import (
 	"context"
-
 	"github.com/turbot/steampipe-plugin-sdk/plugin"
 	"github.com/turbot/steampipe-plugin-sdk/plugin/transform"
 )
@@ -120,6 +119,6 @@ func Plugin(ctx context.Context) *plugin.Plugin {
 			"aws_vpc_vpn_gateway":                    tableAwsVpcVpnGateway(ctx),
 		},
 	}
-
+	//p.Logger.SetLevel(hclog.Trace)
 	return p
 }
