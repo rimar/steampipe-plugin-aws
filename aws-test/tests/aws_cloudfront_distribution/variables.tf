@@ -117,7 +117,7 @@ output "domain_name" {
   value = aws_cloudfront_distribution.named_test_resource.domain_name
 }
 
-output "id" {
+output "resource_id" {
   value = aws_cloudfront_distribution.named_test_resource.id
 }
 

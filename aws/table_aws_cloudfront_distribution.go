@@ -9,19 +9,20 @@ import (
 	"github.com/turbot/steampipe-plugin-sdk/plugin/transform"
 )
 
+//// TABLE DEFINITION
+
 func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
 	return &plugin.Table{
 		Name:        "aws_cloudfront_distribution",
 		Description: "AWS Cloudfront Distribution",
 		Get: &plugin.GetConfig{
 			KeyColumns:        plugin.SingleColumn("id"),
-			ShouldIgnoreError: isNotFoundError([]string{"ValidationException"}),
+			ShouldIgnoreError: isNotFoundError([]string{"NoSuchDistribution"}),
 			Hydrate:           getCloudfrontDistribution,
 		},
 		List: &plugin.ListConfig{
 			Hydrate: listAwsCloudfrontDistribution,
 		},
-		GetMatrixItem: BuildRegionList,
 		Columns: awsRegionalColumns([]*plugin.Column{
 			{
 				Name:        "id",
@@ -32,6 +33,12 @@ func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
 				Name:        "enabled",
 				Description: "Whether the Distribution is enabled to accept user requests for content.",
 				Type:        proto.ColumnType_BOOL,
+			},
+			{
+				Name:        "e_tag",
+				Description: "The current version of the distribution's information.",
+				Type:        proto.ColumnType_STRING,
+				Hydrate:     getCloudfrontDistribution,
 			},
 			{
 				Name:        "status",
@@ -49,6 +56,13 @@ func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
 				Type:        proto.ColumnType_STRING,
 			},
 			{
+				Name:        "tags_src",
+				Description: "A list of tags assigned to the Maintenance Window",
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getCloudfrontDistributionTags,
+				Transform:   transform.FromField("Tags.Items"),
+			},
+			{
 				Name:        "comment",
 				Description: "The comment originally specified when this Distribution was created.",
 				Type:        proto.ColumnType_STRING,
@@ -63,6 +77,48 @@ func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
 				Description: "Whether CloudFront responds to IPv6 DNS requests with an IPv6 address for your Distribution.",
 				Type:        proto.ColumnType_BOOL,
 				Transform:   transform.FromField("IsIPV6Enabled"),
+			},
+			{
+				Name:        "active_trusted_key_groups_enabled",
+				Description: "This field is true if any of the key groups have public keys that CloudFront can use to verify the signatures of signed URLs and signed cookies. If not, this field is false.",
+				Type:        proto.ColumnType_BOOL,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.ActiveTrustedKeyGroups.Enabled"),
+			},
+			{
+				Name:        "active_trusted_key_groups_items",
+				Description: "A list of key groups, including the identifiers of the public keys in each key group that CloudFront can use to verify the signatures of signed URLs and signed cookies.",
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.ActiveTrustedKeyGroups.Items"),
+			},
+			{
+				Name:        "active_trusted_key_groups_quantity",
+				Description: "The number of key groups in the list.",
+				Type:        proto.ColumnType_INT,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.ActiveTrustedKeyGroups.Quantity"),
+			},
+			{
+				Name:        "active_trusted_signers_enabled",
+				Description: "This field is true if any of the AWS accounts in the list have active CloudFront key pairs that CloudFront can use to verify the signatures of signed URLs and signed cookies. If not, this field is false.",
+				Type:        proto.ColumnType_BOOL,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.ActiveTrustedSigners.Enabled"),
+			},
+			{
+				Name:        "active_trusted_signers_items",
+				Description: "A list of AWS accounts and the identifiers of active CloudFront key pairs in each account that CloudFront can use to verify the signatures of signed URLs and signed cookies.",
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.ActiveTrustedSigners.Items"),
+			},
+			{
+				Name:        "active_trusted_signers_quantity",
+				Description: "The number of AWS accounts in the list.",
+				Type:        proto.ColumnType_INT,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.ActiveTrustedSigners.Quantity"),
 			},
 			{
 				Name:        "price_class",
@@ -112,6 +168,27 @@ func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
 				Transform:   transform.FromField("Origins.Items"),
 			},
 			{
+				Name:        "in_progress_invalidation_batches",
+				Description: "A list of origins. ",
+				Type:        proto.ColumnType_INT,
+				Hydrate:     getCloudfrontDistribution,
+				Transform:   transform.FromField("Distribution.InProgressInvalidationBatches"),
+			},
+			/// Standard columns for all tables
+			{
+				Name:        "title",
+				Description: resourceInterfaceDescription("title"),
+				Type:        proto.ColumnType_STRING,
+				Transform:   transform.FromField("Id"),
+			},
+			{
+				Name:        "tags",
+				Description: resourceInterfaceDescription("tags"),
+				Type:        proto.ColumnType_JSON,
+				Hydrate:     getCloudfrontDistributionTags,
+				Transform:   transform.FromField("Tags.Items").Transform(cloudfrontDistributionTagListToTurbotTags),
+			},
+			{
 				Name:        "akas",
 				Description: resourceInterfaceDescription("akas"),
 				Type:        proto.ColumnType_JSON,
@@ -124,16 +201,10 @@ func tableAwsCloudfrontDistribution(_ context.Context) *plugin.Table {
 //// LIST FUNCTION
 
 func listAwsCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, _ *plugin.HydrateData) (interface{}, error) {
-	// TODO put me in helper function
-	var region string
-	matrixRegion := plugin.GetMatrixItem(ctx)[matrixKeyRegion]
-	if matrixRegion != nil {
-		region = matrixRegion.(string)
-	}
-	plugin.Logger(ctx).Trace("listAwsCloudfrontDistribution", "AWS_REGION", region)
+	plugin.Logger(ctx).Trace("listAwsCloudfrontDistribution")
 
 	// Create session
-	svc, err := CloudFrontService(ctx, d, region)
+	svc, err := CloudFrontService(ctx, d)
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +215,6 @@ func listAwsCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, _ *
 		func(page *cloudfront.ListDistributionsOutput, isLast bool) bool {
 			for _, parameter := range page.DistributionList.Items {
 				d.StreamListItem(ctx, parameter)
-
 			}
 			return !isLast
 		},
@@ -154,20 +224,17 @@ func listAwsCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, _ *
 }
 
 func getCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
-	logger := plugin.Logger(ctx)
-	logger.Trace("getCloudfrontDistribution")
-	region := plugin.GetMatrixItem(ctx)[matrixKeyRegion].(string)
+	plugin.Logger(ctx).Trace("getCloudfrontDistribution")
 
-	// Create Session
-	svc, err := CloudFrontService(ctx, d, region)
+	// Create session
+	svc, err := CloudFrontService(ctx, d)
 	if err != nil {
 		return nil, err
 	}
 
 	var cloudfrontID string
 	if h.Item != nil {
-		i := h.Item.(*cloudfront.DistributionList)
-		cloudfrontID = *i.Items[0].Id
+		cloudfrontID = *cloudfrontDistributionValue(h.Item, "id")
 	} else {
 		cloudfrontID = d.KeyColumnQuals["id"].GetStringValue()
 	}
@@ -178,11 +245,74 @@ func getCloudfrontDistribution(ctx context.Context, d *plugin.QueryData, h *plug
 
 	op, err := svc.GetDistribution(params)
 	if err != nil {
-		logger.Debug("getCloudfrontDistribution", "ERROR", err)
 		return nil, err
 	}
 
+	return op, nil
+}
 
+func getCloudfrontDistributionTags(ctx context.Context, d *plugin.QueryData, h *plugin.HydrateData) (interface{}, error) {
+	plugin.Logger(ctx).Trace("getCloudfrontDistributionTags")
+
+	// Create session
+	svc, err := CloudFrontService(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+
+	cloudfrontArn := cloudfrontDistributionValue(h.Item, "arn")
+
+	// Build the params
+	params := &cloudfront.ListTagsForResourceInput{
+		Resource: cloudfrontArn,
+	}
+
+	// Get call
+	op, err := svc.ListTagsForResource(params)
+	if err != nil {
+		return nil, err
+	}
 
 	return op, nil
+}
+
+/// TRANSFORM FUNCTIONS
+
+func cloudfrontDistributionTagListToTurbotTags(ctx context.Context, d *transform.TransformData) (interface{}, error) {
+	plugin.Logger(ctx).Trace("cloudfrontDistributionTagListToTurbotTags")
+	tagList := d.Value.([]*cloudfront.Tag)
+
+	// Mapping the resource tags inside turbotTags
+	var turbotTagsMap map[string]string
+	if tagList != nil {
+		turbotTagsMap = map[string]string{}
+		for _, i := range tagList {
+			turbotTagsMap[*i.Key] = *i.Value
+		}
+	} else {
+		return nil, nil
+	}
+
+	return turbotTagsMap, nil
+}
+
+func cloudfrontDistributionValue(item interface{}, value string) *string {
+	switch item.(type) {
+	case *cloudfront.GetDistributionOutput:
+		if value == "id" {
+			val := item.(*cloudfront.GetDistributionOutput).Distribution
+			return val.Id
+		}
+		//arn := *item.(*cloudfront.GetDistributionOutput)
+		//return *item.(*cloudfront.GetDistributionOutput).Distribution.ARN
+		val := item.(*cloudfront.GetDistributionOutput).Distribution
+			return val.Id
+
+	case *cloudfront.DistributionSummary:
+		if value == "id" {
+			return item.(*cloudfront.DistributionSummary).Id
+		}
+		return item.(*cloudfront.DistributionSummary).ARN
+	}
+	return nil
 }

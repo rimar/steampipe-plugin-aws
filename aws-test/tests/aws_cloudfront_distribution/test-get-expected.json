@@ -1,0 +1,11 @@
+[
+  {
+    "akas": ["{{ output.resource_aka.value }}"],
+    "domain_name": "{{ output.domain_name.value }}",
+    "status": "Deployed",
+    "tags": {
+      "name": "{{ resourceName }}"
+    },
+    "title": "{{ output.resource_id.value }}"
+  }
+]

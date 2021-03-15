@@ -140,23 +140,19 @@ func CloudFormationService(ctx context.Context, d *plugin.QueryData, region stri
 }
 
 // CloudFrontService returns the service connection for AWS CloudFront service
-func CloudFrontService(ctx context.Context, d *plugin.QueryData, region string) (*cloudfront.CloudFront, error) {
-	if region == "" {
-		return nil, fmt.Errorf("region must be passed CloudFrontService")
-	}
+func CloudFrontService(ctx context.Context, d *plugin.QueryData) (*cloudfront.CloudFront, error) {
 	// have we already created and cached the service?
-	serviceCacheKey := fmt.Sprintf("cloudfront-%s", region)
+	serviceCacheKey := fmt.Sprintf("cloudfront")
 	if cachedData, ok := d.ConnectionManager.Cache.Get(serviceCacheKey); ok {
 		return cachedData.(*cloudfront.CloudFront), nil
 	}
 	// so it was not in cache - create service
-	sess, err := getSession(ctx, d, region)
+	sess, err := getSession(ctx, d, GetDefaultAwsRegion(d))
 	if err != nil {
 		return nil, err
 	}
 	svc := cloudfront.New(sess)
 	d.ConnectionManager.Cache.Set(serviceCacheKey, svc)
-
 	return svc, nil
 }
 
